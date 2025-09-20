@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth, clerkClient } from '@clerk/nextjs/server'
+import { connect } from '@/lib/mongoose'
+import Upload from '@/lib/models/upload'
 
 export async function POST(request: NextRequest) {
   try {
@@ -173,6 +175,63 @@ export async function POST(request: NextRequest) {
         userMessage = 'Unable to process the uploaded image. Please try a different file format.'
       }
       
+      // Store failed upload in MongoDB for tracking
+      try {
+        await connect()
+        
+        const failedUpload = new Upload({
+          userId: userId,
+          filename: file.name,
+          processingMode: processingMode || "Automatic - Full AI Pipeline",
+          bodyPartPreference: bodyPartPreference || "Auto-detect",
+          patientSymptoms: patientSymptoms || '',
+          notes: notes || '',
+          
+          // Patient Information
+          patientInfo: {
+            patientId: patientId || '',
+            name: patientName || '',
+            dob: patientDob || '',
+            age: patientAge ? parseInt(patientAge) : undefined,
+            gender: patientGender || 'unknown',
+            mrn: patientMrn || '',
+            phone: patientPhone || '',
+            email: patientEmail || '',
+            additional: patientAdditional || ''
+          },
+          
+          // Store error information in analysisResult
+          analysisResult: {
+            cloudinary_urls: {
+              original_image_url: '',
+              annotated_image_url: ''
+            },
+            triage: {
+              level: 'AMBER',
+              body_part: '',
+              detections: [],
+              recommendations: []
+            },
+            patient_summary: `Analysis failed: ${userMessage}`,
+            processing_time: 0,
+            confidence_score: 0,
+            pdf_report: {
+              content: '',
+              filename: '',
+              size_bytes: 0
+            }
+          },
+          
+          status: 'failed'
+        })
+        
+        await failedUpload.save()
+        console.log(`Failed upload stored in MongoDB for user: ${userId}`)
+        
+      } catch (dbError) {
+        console.error('Failed to store failed upload in MongoDB:', dbError)
+      }
+      
       return NextResponse.json(
         { 
           error: userMessage,
@@ -187,14 +246,147 @@ export async function POST(request: NextRequest) {
 
     const result = await response.json()
     
-    return NextResponse.json({
-      success: true,
-      data: result,
-      userId: userId // Include user ID in response for logging
-    })
+    // Store the upload response in MongoDB
+    try {
+      await connect()
+      
+      // Create the upload document with the analysis result
+      const uploadDoc = new Upload({
+        userId: userId,
+        filename: file.name,
+        processingMode: processingMode || "Automatic - Full AI Pipeline",
+        bodyPartPreference: bodyPartPreference || "Auto-detect",
+        patientSymptoms: patientSymptoms || '',
+        notes: notes || '',
+        
+        // Patient Information
+        patientInfo: {
+          patientId: patientId || '',
+          name: patientName || '',
+          dob: patientDob || '',
+          age: patientAge ? parseInt(patientAge) : undefined,
+          gender: patientGender || 'unknown',
+          mrn: patientMrn || '',
+          phone: patientPhone || '',
+          email: patientEmail || '',
+          additional: patientAdditional || ''
+        },
+        
+        // Store the complete analysis result
+        analysisResult: {
+          cloudinary_urls: {
+            original_image_url: result.cloudinary_urls?.original_image_url || '',
+            annotated_image_url: result.cloudinary_urls?.annotated_image_url || ''
+          },
+          triage: {
+            level: result.triage?.level || 'AMBER',
+            body_part: result.triage?.body_part || '',
+            detections: result.triage?.detections || [],
+            recommendations: result.triage?.recommendations || []
+          },
+          patient_summary: result.patient_summary || '',
+          processing_time: result.steps?.processing?.duration_ms || 0,
+          confidence_score: result.triage?.confidence || 0,
+          pdf_report: {
+            content: result.pdf_report?.content || '',
+            filename: result.pdf_report?.filename || '',
+            size_bytes: result.pdf_report?.size_bytes || 0
+          }
+        },
+        
+        status: 'completed'
+      })
+      
+      const savedUpload = await uploadDoc.save()
+      console.log(`Upload stored in MongoDB with ID: ${savedUpload._id}`)
+      
+      // Return the response with the MongoDB document ID
+      return NextResponse.json({
+        success: true,
+        data: result,
+        userId: userId,
+        uploadId: savedUpload._id // Include the MongoDB document ID
+      })
+      
+    } catch (dbError) {
+      console.error('Failed to store upload in MongoDB:', dbError)
+      
+      // Still return the analysis result even if DB storage fails
+      // This ensures the user gets their analysis results
+      return NextResponse.json({
+        success: true,
+        data: result,
+        userId: userId,
+        warning: 'Analysis completed but failed to store in database'
+      })
+    }
 
   } catch (error) {
     console.error('Upload error:', error)
+    
+    // Store failed upload in MongoDB for general errors
+    try {
+      // Re-extract userId in case it wasn't available in the outer scope
+      const authState = await auth()
+      const errorUserId = authState?.userId
+      
+      if (errorUserId) {
+        await connect()
+        
+        const failedUpload = new Upload({
+          userId: errorUserId,
+          filename: 'unknown',
+          processingMode: "Automatic - Full AI Pipeline",
+          bodyPartPreference: "Auto-detect",
+          patientSymptoms: '',
+          notes: '',
+          
+          // Patient Information
+          patientInfo: {
+            patientId: '',
+            name: '',
+            dob: '',
+            age: undefined,
+            gender: 'unknown',
+            mrn: '',
+            phone: '',
+            email: '',
+            additional: ''
+          },
+          
+          // Store error information in analysisResult
+          analysisResult: {
+            cloudinary_urls: {
+              original_image_url: '',
+              annotated_image_url: ''
+            },
+            triage: {
+              level: 'AMBER',
+              body_part: '',
+              detections: [],
+              recommendations: []
+            },
+            patient_summary: `System error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            processing_time: 0,
+            confidence_score: 0,
+            pdf_report: {
+              content: '',
+              filename: '',
+              size_bytes: 0
+            }
+          },
+          
+          status: 'failed'
+        })
+        
+        await failedUpload.save()
+        console.log(`General error upload stored in MongoDB for user: ${errorUserId}`)
+      }
+      
+    } catch (dbError) {
+      console.error('Failed to store error upload in MongoDB:', dbError)
+    }
+    
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
