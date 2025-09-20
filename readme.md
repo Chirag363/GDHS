@@ -60,10 +60,5 @@ Unlike existing research (FracAtlas dataset, AI Expert Systems, and medico-legal
 
 ---
 
-## 🔧 Setup Instructions
-```bash
-# Clone the repo
-git clone https://github.com/your-username/orthopedic-assistant-mcp.git
-cd orthopedic-assistant-mcp
 
 
