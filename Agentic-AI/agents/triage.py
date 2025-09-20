@@ -317,7 +317,7 @@ class TriageAgent:
             raw_label = detection.get("label", "")
             label = raw_label.lower()
             # Normalize label for matching: convert spaces/hyphens to underscores
-            normalized_label = label.replace(" ", "_").replace("-", "_")
+            normalized_label = label.replace(" ", "").replace("-", "")
             # Normalize confidence: prefer 'confidence', fallback to 'score'
             score = detection.get("confidence")
             if score is None:
@@ -619,7 +619,7 @@ class TriageAgent:
             
             # Ensure medical disclaimer is included
             result["medical_disclaimer"] = (
-                "⚠️ This triage assessment is for informational purposes only. "
+                "⚠ This triage assessment is for informational purposes only. "
                 "Always seek professional medical evaluation for any injury or health concern."
             )
             
@@ -636,7 +636,7 @@ class TriageAgent:
                 "error": str(e),
                 "method": "error_fallback",
                 "medical_disclaimer": (
-                    "⚠️ This triage assessment is for informational purposes only. "
+                    "⚠ This triage assessment is for informational purposes only. "
                     "Always seek professional medical evaluation for any injury or health concern."
                 )
             }

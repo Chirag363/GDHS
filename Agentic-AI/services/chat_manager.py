@@ -12,7 +12,7 @@ from schemas.base import PatientInfo
 class ChatSessionManager:
     """Manages chat sessions and conversation history."""
     
-    def __init__(self):
+    def ___init___(self):
         """Initialize the session manager."""
         # In production, this should use Redis or a proper database
         self._sessions: Dict[str, ChatSession] = {}

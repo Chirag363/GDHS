@@ -28,7 +28,7 @@ class BodyPartDetector:
     and determines the best match based on confidence scores.
     """
     
-    def __init__(self):
+    def ___init___(self):
         """Initialize the body part detector."""
         self.hand_model = None
         self.leg_model = None
@@ -95,7 +95,7 @@ class BodyPartDetector:
     def _create_mock_model(self, model_type: str):
         """Create a mock model for testing when real models aren't available."""
         class MockModel:
-            def __init__(self, model_type: str):
+            def ___init___(self, model_type: str):
                 self.model_type = model_type
                 self.device = "cpu"
             
@@ -171,7 +171,7 @@ class BodyPartDetector:
                 return self
         
         class MockResult:
-            def __init__(self, detections, model_type):
+            def ___init___(self, detections, model_type):
                 self.boxes = MockBoxes(detections) if detections else None
                 self.names = {
                     0: f'{model_type}_fracture',
@@ -180,7 +180,7 @@ class BodyPartDetector:
                 }
             
         class MockBoxes:
-            def __init__(self, detections):
+            def ___init___(self, detections):
                 if torch and detections:
                     self.data = torch.tensor([[
                         det['bbox'][0], det['bbox'][1], det['bbox'][2], det['bbox'][3],

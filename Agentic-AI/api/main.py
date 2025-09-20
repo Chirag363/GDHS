@@ -49,9 +49,9 @@ app.add_middleware(
 )
 
 # Add security middleware
-app.add_middleware(create_response_security_middleware())
-app.add_middleware(create_validation_middleware())
-app.add_middleware(create_security_middleware())
+# app.add_middleware(create_response_security_middleware())
+# app.add_middleware(create_validation_middleware())
+# app.add_middleware(create_security_middleware())
 
 # Add exception handlers
 app.add_exception_handler(OrthopedicError, orthopedic_error_handler)
