@@ -1,4 +1,4 @@
-import { verifyWebhook } from '@clerk/nextjs/webhooks'
+import { Webhook } from 'svix'
 import { NextRequest } from 'next/server'
 import { CreateUser, UpdateUser, DeleteUser } from '@/lib/actions/user.action'
 
@@ -31,8 +31,50 @@ export async function POST(req: NextRequest) {
   console.log('=== WEBHOOK START ===')
   
   try {
-    // Verify webhook signature
-    const evt = await verifyWebhook(req)
+    // Get the headers
+    const headerPayload = req.headers
+    const svix_id = headerPayload.get("svix-id")
+    const svix_timestamp = headerPayload.get("svix-timestamp")
+    const svix_signature = headerPayload.get("svix-signature")
+
+    // If there are no headers, error out
+    if (!svix_id || !svix_timestamp || !svix_signature) {
+      return new Response('Error occured -- no svix headers', {
+        status: 400,
+      })
+    }
+
+    // Get the body
+    const payload = await req.text()
+    const body = JSON.parse(payload)
+
+    // Get the signing secret from environment
+    const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SIGNING_SECRET
+
+    if (!WEBHOOK_SECRET) {
+      throw new Error('Please add CLERK_WEBHOOK_SIGNING_SECRET from Clerk Dashboard to .env or .env.local')
+    }
+
+    // Create a new Svix instance with your secret.
+    const wh = new Webhook(WEBHOOK_SECRET)
+
+    let evt: any
+
+    // Verify the payload with the headers
+    try {
+      evt = wh.verify(payload, {
+        "svix-id": svix_id,
+        "svix-timestamp": svix_timestamp,
+        "svix-signature": svix_signature,
+      }) as any
+    } catch (err) {
+      console.error('Error verifying webhook:', err)
+      return new Response('Error occured', {
+        status: 400,
+      })
+    }
+
+    // Get the event type and data
     const { data: clerkData, type: eventType } = evt
     
     console.log(`Received webhook: ${eventType} for user ${clerkData.id}`)

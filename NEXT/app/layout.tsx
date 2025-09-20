@@ -24,8 +24,8 @@ export default function RootLayout({
     <ClerkProvider
     signInUrl="/login"
     signUpUrl="/signup"
-    signInFallbackRedirectUrl="/dashboard"
-    signUpFallbackRedirectUrl="/dashboard"
+    afterSignInUrl="/dashboard"
+    afterSignUpUrl="/dashboard"
     >
     <html lang="en" suppressHydrationWarning>
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
