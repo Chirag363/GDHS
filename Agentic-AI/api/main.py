@@ -14,6 +14,7 @@ from api.analyze import router as analyze_router
 from api.annotated import router as annotated_router
 from api.pdf_reports import router as pdf_router
 from api.chat import router as chat_router
+from api.clinical_analysis import router as clinical_analysis_router
 from api.middleware import (
     create_security_middleware,
     create_validation_middleware, 
@@ -67,6 +68,7 @@ app.include_router(analyze_router, tags=["analysis"])
 app.include_router(annotated_router, prefix="/api", tags=["images", "annotated"])
 app.include_router(pdf_router, tags=["reports", "pdf"])
 app.include_router(chat_router, tags=["chat", "mcp"])
+app.include_router(clinical_analysis_router, prefix="/api", tags=["clinical", "analysis"])
 
 
 @app.on_event("startup")

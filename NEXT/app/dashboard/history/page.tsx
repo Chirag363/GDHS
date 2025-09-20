@@ -1,97 +1,103 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import PatientCard from "@/components/ui/patient-card"
+import { Loader2, Search, Users } from "lucide-react"
 
 export default function HistoryPage() {
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
   const [severityFilter, setSeverityFilter] = useState("")
+  const [searchTerm, setSearchTerm] = useState("")
+  const [patients, setPatients] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
-  // Mock data for demonstration
-  const historyData = [
-    {
-      id: "ST-001",
-      date: "2024-01-15",
-      patient: "Patient #1234",
-      modality: "X-ray",
-      bodyPart: "Hand",
-      status: "red",
-      processed: "2024-01-15 14:35:22",
-    },
-    {
-      id: "ST-002",
-      date: "2024-01-15",
-      patient: "Patient #1235",
-      modality: "CT",
-      bodyPart: "Leg",
-      status: "green",
-      processed: "2024-01-15 13:22:15",
-    },
-    {
-      id: "ST-003",
-      date: "2024-01-14",
-      patient: "Patient #1236",
-      modality: "MRI",
-      bodyPart: "Spine",
-      status: "amber",
-      processed: "2024-01-14 16:45:33",
-    },
-    {
-      id: "ST-004",
-      date: "2024-01-14",
-      patient: "Patient #1237",
-      modality: "X-ray",
-      bodyPart: "Ribs",
-      status: "green",
-      processed: "2024-01-14 11:20:44",
-    },
-    {
-      id: "ST-005",
-      date: "2024-01-13",
-      patient: "Patient #1238",
-      modality: "CT",
-      bodyPart: "Hand",
-      status: "amber",
-      processed: "2024-01-13 09:15:22",
-    },
-  ]
-
-  const getStatusBadge = (status: string) => {
-    const variants = {
-      red: "bg-red-100 text-red-800",
-      amber: "bg-yellow-100 text-yellow-800",
-      green: "bg-green-100 text-green-800",
+  // Fetch patients from API
+  useEffect(() => {
+    const fetchPatients = async () => {
+      try {
+        setLoading(true)
+        const response = await fetch('/api/patients')
+        const data = await response.json()
+        
+        if (data.success) {
+          setPatients(data.patients)
+        } else {
+          setError('Failed to fetch patients')
+        }
+      } catch (err) {
+        setError('Failed to fetch patients')
+        console.error('Error fetching patients:', err)
+      } finally {
+        setLoading(false)
+      }
     }
-    return <Badge className={variants[status as keyof typeof variants]}>{status.toUpperCase()}</Badge>
-  }
 
-  const filteredData = historyData.filter((item) => {
-    if (severityFilter && item.status !== severityFilter) return false
-    if (dateFrom && item.date < dateFrom) return false
-    if (dateTo && item.date > dateTo) return false
+    fetchPatients()
+  }, [])
+
+  // Filter patients based on search and filters
+  const filteredPatients = patients.filter((patient) => {
+    // Search filter
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase()
+      const matchesSearch = 
+        patient.name?.toLowerCase().includes(searchLower) ||
+        patient.patientId?.toLowerCase().includes(searchLower) ||
+        patient.mrn?.toLowerCase().includes(searchLower) ||
+        patient.email?.toLowerCase().includes(searchLower)
+      
+      if (!matchesSearch) return false
+    }
+
+    // Severity filter
+    if (severityFilter && patient.lastTriageLevel !== severityFilter) return false
+
+    // Date filters
+    if (dateFrom && new Date(patient.lastVisit) < new Date(dateFrom)) return false
+    if (dateTo && new Date(patient.lastVisit) > new Date(dateTo)) return false
+
     return true
   })
 
   return (
     <div className="p-6">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Study History</h1>
-        <p className="text-gray-600 mt-2">View and filter your past diagnostic studies</p>
+        <div className="flex items-center gap-3 mb-2">
+          <Users className="h-8 w-8 text-blue-600" />
+          <h1 className="text-3xl font-bold text-gray-900">Patient History</h1>
+        </div>
+        <p className="text-gray-600">View and manage your patient records and diagnostic studies</p>
       </div>
 
       {/* Filters */}
       <Card className="rounded-2xl mb-6">
         <CardHeader>
-          <CardTitle>Filters</CardTitle>
-          <CardDescription>Filter studies by date range and severity</CardDescription>
+          <CardTitle>Search & Filters</CardTitle>
+          <CardDescription>Filter patients by date range, severity, and search terms</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+              <Label htmlFor="search">Search Patients</Label>
+              <div className="relative mt-1">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  id="search"
+                  type="text"
+                  placeholder="Name, ID, MRN..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
             <div>
               <Label htmlFor="date-from">From Date</Label>
               <Input
@@ -113,17 +119,17 @@ export default function HistoryPage() {
               />
             </div>
             <div>
-              <Label htmlFor="severity">Severity</Label>
+              <Label htmlFor="severity">Priority Level</Label>
               <select
                 id="severity"
                 value={severityFilter}
                 onChange={(e) => setSeverityFilter(e.target.value)}
                 className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">All Severities</option>
-                <option value="red">Red Priority</option>
-                <option value="amber">Amber Priority</option>
-                <option value="green">Green Priority</option>
+                <option value="">All Priorities</option>
+                <option value="RED">Red Priority</option>
+                <option value="AMBER">Amber Priority</option>
+                <option value="GREEN">Green Priority</option>
               </select>
             </div>
             <div className="flex items-end">
@@ -133,6 +139,7 @@ export default function HistoryPage() {
                   setDateFrom("")
                   setDateTo("")
                   setSeverityFilter("")
+                  setSearchTerm("")
                 }}
                 className="w-full"
               >
@@ -143,49 +150,78 @@ export default function HistoryPage() {
         </CardContent>
       </Card>
 
-      {/* History Table */}
-      <Card className="rounded-2xl">
-        <CardHeader>
-          <CardTitle>Study History ({filteredData.length} studies)</CardTitle>
-          <CardDescription>Complete history of processed diagnostic studies</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">Study ID</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">Date</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">Patient</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">Modality</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">Body Part</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">Priority</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">Processed</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredData.map((study) => (
-                  <tr key={study.id} className="border-b border-gray-100">
-                    <td className="py-3 px-4 text-sm font-medium text-gray-900">{study.id}</td>
-                    <td className="py-3 px-4 text-sm text-gray-900">{study.date}</td>
-                    <td className="py-3 px-4 text-sm text-gray-900">{study.patient}</td>
-                    <td className="py-3 px-4 text-sm text-gray-900">{study.modality}</td>
-                    <td className="py-3 px-4 text-sm text-gray-900">{study.bodyPart}</td>
-                    <td className="py-3 px-4">{getStatusBadge(study.status)}</td>
-                    <td className="py-3 px-4 text-sm text-gray-900">{study.processed}</td>
-                    <td className="py-3 px-4">
-                      <Button variant="outline" size="sm">
-                        View
-                      </Button>
-                    </td>
-                  </tr>
+      {/* Loading State */}
+      {loading && (
+        <Card className="rounded-2xl">
+          <CardContent className="py-12">
+            <div className="flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+              <span className="ml-3 text-gray-600">Loading patients...</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <Card className="rounded-2xl">
+          <CardContent className="py-12">
+            <div className="text-center text-red-600">
+              <p>{error}</p>
+              <Button 
+                variant="outline" 
+                onClick={() => window.location.reload()} 
+                className="mt-4"
+              >
+                Try Again
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Patient Grid */}
+      {!loading && !error && (
+        <Card className="rounded-2xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Patient Records ({filteredPatients.length} patients)
+            </CardTitle>
+            <CardDescription>
+              {filteredPatients.length === 0 && patients.length > 0 
+                ? "No patients match your current filters" 
+                : "Complete history of your patients and their diagnostic studies"
+              }
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {filteredPatients.length === 0 ? (
+              <div className="text-center py-12">
+                <Users className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  {patients.length === 0 ? "No patients found" : "No patients match your filters"}
+                </h3>
+                <p className="text-gray-600">
+                  {patients.length === 0 
+                    ? "Upload your first diagnostic study to see patients here." 
+                    : "Try adjusting your search criteria or clearing the filters."
+                  }
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {filteredPatients.map((patient) => (
+                  <PatientCard
+                    key={patient.patientId}
+                    patient={patient}
+                  />
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
