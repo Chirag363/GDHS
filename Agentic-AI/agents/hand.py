@@ -247,15 +247,19 @@ class HandAgent:
             }
             
             # Draw detections
-            for detection in detections:
+            logger.info(f"Creating annotated image with {len(detections)} detections")
+            for i, detection in enumerate(detections):
                 x, y, w, h = detection.bbox
                 x1, y1, x2, y2 = x, y, x + w, y + h
+                
+                logger.info(f"Detection {i}: label={detection.label}, bbox=({x}, {y}, {w}, {h}), coords=({x1}, {y1}, {x2}, {y2}), score={detection.score}")
                 
                 # Get color for this detection type
                 color = colors.get(detection.label, "#FF0000")
                 
                 # Draw bounding box
                 draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
+                logger.info(f"Drew rectangle at ({x1}, {y1}, {x2}, {y2}) with color {color}")
                 
                 # Draw label with confidence
                 label_text = f"{detection.label}: {detection.score:.2f}"
@@ -281,7 +285,10 @@ class HandAgent:
             # Convert back to bytes
             img_buffer = io.BytesIO()
             image.save(img_buffer, format='JPEG', quality=95)
-            return img_buffer.getvalue()
+            annotated_bytes = img_buffer.getvalue()
+            
+            logger.info(f"Successfully created annotated image: {len(annotated_bytes)} bytes")
+            return annotated_bytes
             
         except Exception as e:
             logger.error(f"Failed to create annotated image: {e}")
@@ -317,10 +324,28 @@ class HandAgent:
                 save=False                  # Don't save results to disk
             )
             
+            # Log model results for debugging
+            logger.info(f"YOLO model inference completed. Results: {len(model_results)} batch(es)")
+            if len(model_results) > 0:
+                result = model_results[0]
+                if hasattr(result, 'boxes') and result.boxes is not None:
+                    num_detections = len(result.boxes)
+                    logger.info(f"YOLO detected {num_detections} objects")
+                    if num_detections > 0:
+                        logger.info(f"Detection details: boxes shape={result.boxes.xyxy.shape}, confidence scores={result.boxes.conf.tolist()}")
+                else:
+                    logger.info("YOLO model returned no boxes")
+            
             # Postprocess detections
             detections = self._postprocess_detections(model_results, original_size)
+            logger.info(f"After postprocessing: {len(detections)} valid detections")
+            for i, det in enumerate(detections):
+                logger.info(f"Detection {i}: {det.label} confidence={det.score:.3f} bbox={det.bbox}")
             
             # Create annotated image
+            logger.info(f"About to create annotated image with {len(detections)} detections")
+            for i, det in enumerate(detections):
+                logger.info(f"Input detection {i}: {det.label} confidence={det.score:.3f} bbox={det.bbox}")
             annotated_image_data = self._create_annotated_image(image_data, detections)
             
             # Convert detections to dict format for consistency
