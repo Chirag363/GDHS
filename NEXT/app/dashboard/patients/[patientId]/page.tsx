@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -18,8 +18,25 @@ import {
   Download,
   Eye,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Clock,
+  CheckCircle,
+  ExternalLink,
+  Star
 } from "lucide-react"
+
+interface Detection {
+  label: string
+  score: number
+  bbox?: number[]
+}
+
+interface Triage {
+  level: "RED" | "AMBER" | "GREEN" | string
+  bodyPart: string
+  detections: Detection[]
+  recommendations: string[]
+}
 
 interface Study {
   id: string
@@ -30,16 +47,7 @@ interface Study {
   bodyPart: string
   symptoms: string
   notes: string
-  triage: {
-    level: string
-    bodyPart: string
-    detections: Array<{
-      label: string
-      score: number
-      bbox?: number[]
-    }>
-    recommendations: string[]
-  }
+  triage: Triage
   images: {
     original?: string
     annotated?: string
@@ -65,11 +73,13 @@ interface Patient {
   additional?: string
 }
 
+type Params = { patientId: string }
+
 export default function PatientDetailsPage() {
-  const params = useParams()
   const router = useRouter()
-  const patientId = params.patientId as string
-  
+  const params = useParams<Params>()
+  const patientId = useMemo(() => params?.patientId ?? "", [params])
+
   const [patient, setPatient] = useState<Patient | null>(null)
   const [studies, setStudies] = useState<Study[]>([])
   const [loading, setLoading] = useState(true)
@@ -79,51 +89,65 @@ export default function PatientDetailsPage() {
 
   useEffect(() => {
     const fetchPatientDetails = async () => {
+      if (!patientId) return
       try {
         setLoading(true)
-        const response = await fetch(`/api/patients/${patientId}`)
-        const data = await response.json()
-        
-        if (data.success) {
+        setError("")
+        const response = await fetch(`/api/patients/${encodeURIComponent(patientId)}`)
+        if (!response.ok) {
+          const msg = `Failed to fetch patient details (HTTP ${response.status})`
+          setError(msg)
+          setLoading(false)
+          return
+        }
+        const data = await response.json() as {
+          success: boolean
+          patient?: Patient
+          studies?: Study[]
+          error?: string
+        }
+        if (data.success && data.patient) {
           setPatient(data.patient)
-          setStudies(data.studies)
+          setStudies(Array.isArray(data.studies) ? data.studies : [])
         } else {
-          setError(data.error || 'Failed to fetch patient details')
+          setError(data.error || "Failed to fetch patient details")
         }
       } catch (err) {
-        setError('Failed to fetch patient details')
-        console.error('Error fetching patient details:', err)
+        console.error("Error fetching patient details:", err)
+        setError("Failed to fetch patient details")
       } finally {
         setLoading(false)
       }
     }
 
-    if (patientId) {
-      fetchPatientDetails()
-    }
+    fetchPatientDetails()
   }, [patientId])
 
-  const getTriageBadge = (level: string) => {
-    const variants = {
+  const getTriageBadge = (level?: string) => {
+    const variants: Record<string, string> = {
       RED: "bg-red-100 text-red-800 border-red-200",
-      AMBER: "bg-yellow-100 text-yellow-800 border-yellow-200", 
+      AMBER: "bg-yellow-100 text-yellow-800 border-yellow-200",
       GREEN: "bg-green-100 text-green-800 border-green-200",
     }
-    
+    const cls = variants[level ?? ""] ?? "bg-gray-100 text-gray-800 border-gray-200"
+    const label = level ? `${level} Priority` : "Unknown Priority"
     return (
-      <Badge className={`${variants[level as keyof typeof variants]} border`}>
-        {level} Priority
+      <Badge className={`${cls} border`}>
+        {label}
       </Badge>
     )
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "—"
+    const d = new Date(dateString)
+    if (Number.isNaN(d.getTime())) return dateString
+    return d.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     })
   }
 
@@ -131,36 +155,45 @@ export default function PatientDetailsPage() {
     try {
       setAiAnalysisLoading(true)
       setAiAnalysisResult(null)
-      
-      const response = await fetch('/api/ai-analysis', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          patientId,
-          studies: studies.map(study => ({
-            id: study.id,
-            date: study.date,
-            bodyPart: study.bodyPart,
-            symptoms: study.symptoms,
-            triage: study.triage,
-            patientSummary: study.patientSummary,
-            recommendations: study.triage.recommendations
-          }))
-        })
+      setError("")
+
+      const payload = {
+        patientId,
+        studies: studies.map((study) => ({
+          id: study.id,
+          date: study.date,
+          bodyPart: study.bodyPart,
+          symptoms: study.symptoms,
+          triage: study.triage,
+          patientSummary: study.patientSummary,
+          recommendations: study.triage?.recommendations ?? [],
+        })),
+      }
+
+      const response = await fetch("/api/ai-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       })
-      
-      const data = await response.json()
-      
-      if (data.success) {
+
+      if (!response.ok) {
+        setError(`Failed to generate AI analysis (HTTP ${response.status})`)
+        return
+      }
+
+      const data = await response.json() as {
+        success: boolean
+        analysis?: string
+      }
+
+      if (data.success && typeof data.analysis === "string") {
         setAiAnalysisResult(data.analysis)
       } else {
-        setError('Failed to generate AI analysis')
+        setError("Failed to generate AI analysis")
       }
     } catch (err) {
-      setError('Failed to generate AI analysis')
-      console.error('Error generating AI analysis:', err)
+      console.error("Error generating AI analysis:", err)
+      setError("Failed to generate AI analysis")
     } finally {
       setAiAnalysisLoading(false)
     }
@@ -192,272 +225,409 @@ export default function PatientDetailsPage() {
     )
   }
 
-  return (
-    <div className="p-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="mb-8">
-        <Button 
-          variant="ghost" 
-          onClick={() => router.back()}
-          className="mb-4"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Patient Records
-        </Button>
-        
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              Patient #{patient?.patientId}
-            </h1>
-            <p className="text-gray-600 mt-2">
-              Complete medical history and diagnostic studies
-            </p>
-          </div>
-          
-          <Button 
-            onClick={handleAIAnalysis}
-            disabled={aiAnalysisLoading || studies.length === 0}
-            className="bg-purple-600 hover:bg-purple-700 text-white"
-          >
-            {aiAnalysisLoading ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Analyzing...
-              </>
-            ) : (
-              <>
-                <Brain className="h-4 w-4 mr-2" />
-                AI Clinical Analysis
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
+  const normalCount = studies.filter((s) => s.triage?.level === "GREEN").length
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Patient Information */}
-        <div className="lg:col-span-1">
-          <Card className="rounded-2xl">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5" />
-                Patient Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <h3 className="font-semibold text-lg">{patient?.name}</h3>
-                <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
-                  {patient?.age && <span>{patient.age} years</span>}
-                  {patient?.gender && patient?.age && <span>•</span>}
-                  {patient?.gender && <span className="capitalize">{patient.gender}</span>}
-                </div>
-              </div>
-              
-              <Separator />
-              
-              <div className="space-y-3">
-                {patient?.mrn && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <FileText className="h-4 w-4 text-gray-400" />
-                    <span className="font-medium">MRN:</span>
-                    <span>{patient.mrn}</span>
-                  </div>
-                )}
-                
-                {patient?.phone && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Phone className="h-4 w-4 text-gray-400" />
-                    <span>{patient.phone}</span>
-                  </div>
-                )}
-                
-                {patient?.email && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Mail className="h-4 w-4 text-gray-400" />
-                    <span className="break-all">{patient.email}</span>
-                  </div>
-                )}
-                
-                {patient?.dob && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Calendar className="h-4 w-4 text-gray-400" />
-                    <span>DOB: {new Date(patient.dob).toLocaleDateString()}</span>
-                  </div>
-                )}
-              </div>
-              
-              {patient?.additional && (
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+      <div className="p-6 max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <Button 
+            variant="ghost" 
+            onClick={() => router.back()}
+            className="mb-4 hover:bg-white/50 backdrop-blur-sm transition-all duration-200"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Patient Records
+          </Button>
+        
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-white/20">
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                Patient #{patient?.patientId ?? "—"}
+              </h1>
+              <p className="text-gray-600 mt-2 text-lg">
+                Complete medical history and diagnostic studies
+              </p>
+            </div>
+            
+            <Button 
+              onClick={handleAIAnalysis}
+              disabled={aiAnalysisLoading || studies.length === 0}
+              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 px-6 py-3 rounded-xl"
+            >
+              {aiAnalysisLoading ? (
                 <>
-                  <Separator />
-                  <div>
-                    <span className="font-medium text-sm">Additional Notes:</span>
-                    <p className="text-sm text-gray-600 mt-1">{patient.additional}</p>
-                  </div>
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <Brain className="h-5 w-5 mr-2" />
+                  AI Clinical Analysis
                 </>
               )}
-            </CardContent>
-          </Card>
+            </Button>
+          </div>
+        </div>
 
-          {/* AI Analysis Results */}
-          {aiAnalysisResult && (
-            <Card className="rounded-2xl mt-6">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Brain className="h-5 w-5 text-purple-600" />
-                  AI Clinical Analysis
-                </CardTitle>
-                <CardDescription>
-                  Comprehensive analysis of all patient studies
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="prose prose-sm max-w-none">
-                  <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                    {aiAnalysisResult}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Patient Information */}
+          <div className="lg:col-span-1">
+            <Card className="rounded-2xl bg-white/70 backdrop-blur-sm border border-white/20 shadow-xl">
+              <CardHeader className="text-center pb-2">
+                <div className="relative mx-auto mb-4">
+                  <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 p-1">
+                    <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
+                      <User className="h-12 w-12 text-gray-400" />
+                    </div>
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-green-500 rounded-full border-4 border-white flex items-center justify-center">
+                    <div className="w-3 h-3 bg-white rounded-full"></div>
                   </div>
                 </div>
+                <CardTitle className="text-xl font-bold">
+                  {patient?.name || `Patient ${patient?.patientId ?? ""}`}
+                </CardTitle>
+                <CardDescription className="text-base">
+                  {patient?.age && patient?.gender
+                    ? `${patient.age} years • ${patient.gender.charAt(0).toUpperCase()}${patient.gender.slice(1)}`
+                    : "Patient Information"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Quick Stats */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 text-center border border-blue-200">
+                    <div className="text-2xl font-bold text-blue-600">{studies.length}</div>
+                    <div className="text-sm text-blue-700">Studies</div>
+                  </div>
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 text-center border border-green-200">
+                    <div className="text-2xl font-bold text-green-600">
+                      {normalCount}
+                    </div>
+                    <div className="text-sm text-green-700">Normal</div>
+                  </div>
+                </div>
+                
+                <Separator />
+                
+                <div className="space-y-4">
+                  {!!patient?.mrn && (
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50/50">
+                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                        <FileText className="h-4 w-4 text-blue-600" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">Medical Record</div>
+                        <div className="text-sm text-gray-600">{patient.mrn}</div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {!!patient?.phone && (
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50/50">
+                      <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                        <Phone className="h-4 w-4 text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">Phone</div>
+                        <div className="text-sm text-gray-600">{patient.phone}</div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {!!patient?.email && (
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50/50">
+                      <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
+                        <Mail className="h-4 w-4 text-purple-600" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">Email</div>
+                        <div className="text-sm text-gray-600 break-all">{patient.email}</div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {!!patient?.dob && (
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50/50">
+                      <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
+                        <Calendar className="h-4 w-4 text-indigo-600" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">Date of Birth</div>
+                        <div className="text-sm text-gray-600">{formatDate(patient.dob)}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {!!patient?.additional && (
+                  <>
+                    <Separator />
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                      <div className="flex items-start gap-2">
+                        <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <FileText className="h-3 w-3 text-amber-600" />
+                        </div>
+                        <div>
+                          <div className="font-medium text-sm text-amber-800">Additional Notes</div>
+                          <p className="text-sm text-amber-700 mt-1">{patient.additional}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
-          )}
-        </div>
 
-        {/* Studies List */}
-        <div className="lg:col-span-2">
-          <Card className="rounded-2xl">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="h-5 w-5" />
-                Diagnostic Studies ({studies.length})
-              </CardTitle>
-              <CardDescription>
-                Complete history of diagnostic studies and reports
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                {studies.map((study) => (
-                  <Card key={study.id} className="border border-gray-200">
-                    <CardHeader className="pb-4">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <CardTitle className="text-lg">
-                            Study #{study.studyNumber}
-                          </CardTitle>
-                          <CardDescription>
-                            {formatDate(study.date)}
-                          </CardDescription>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {getTriageBadge(study.triage.level)}
-                        </div>
+            {/* AI Analysis Results */}
+            {!!aiAnalysisResult && (
+              <Card className="rounded-2xl mt-6 bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200/50 shadow-lg">
+                <CardHeader className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-t-2xl">
+                  <CardTitle className="flex items-center gap-2">
+                    <Brain className="h-5 w-5" />
+                    AI Clinical Analysis
+                  </CardTitle>
+                  <CardDescription className="text-purple-100">
+                    Comprehensive analysis of all patient studies
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                    <div className="prose prose-sm max-w-none">
+                      <div className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800 font-mono">
+                        {aiAnalysisResult}
                       </div>
-                    </CardHeader>
-                    
-                    <CardContent className="space-y-4">
-                      {/* Study Details */}
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="font-medium">Body Part:</span>
-                          <p className="text-gray-600">{study.bodyPart}</p>
-                        </div>
-                        <div>
-                          <span className="font-medium">Processing Mode:</span>
-                          <p className="text-gray-600">{study.processingMode}</p>
-                        </div>
-                      </div>
-                      
-                      {study.symptoms && (
-                        <div>
-                          <span className="font-medium text-sm">Symptoms:</span>
-                          <p className="text-sm text-gray-600 mt-1">{study.symptoms}</p>
-                        </div>
-                      )}
-                      
-                      {study.notes && (
-                        <div>
-                          <span className="font-medium text-sm">Notes:</span>
-                          <p className="text-sm text-gray-600 mt-1">{study.notes}</p>
-                        </div>
-                      )}
-                      
-                      {/* Detections */}
-                      {study.triage.detections.length > 0 && (
-                        <div>
-                          <span className="font-medium text-sm">Detections:</span>
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {study.triage.detections.map((detection, idx) => (
-                              <Badge key={idx} variant="outline">
-                                {detection.label} ({(detection.score * 100).toFixed(1)}%)
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Recommendations */}
-                      {study.triage.recommendations.length > 0 && (
-                        <div>
-                          <span className="font-medium text-sm">Recommendations:</span>
-                          <ul className="list-disc list-inside text-sm text-gray-600 mt-1 space-y-1">
-                            {study.triage.recommendations.map((rec, idx) => (
-                              <li key={idx}>{rec}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      
-                      {/* Patient Summary */}
-                      {study.patientSummary && (
-                        <div>
-                          <span className="font-medium text-sm">AI Summary:</span>
-                          <p className="text-sm text-gray-600 mt-1">{study.patientSummary}</p>
-                        </div>
-                      )}
-                      
-                      {/* Actions */}
-                      <div className="flex items-center gap-2 pt-2 border-t">
-                        {study.images.original && (
-                          <Button variant="outline" size="sm">
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Images
-                          </Button>
-                        )}
-                        
-                        {study.pdfReport && (
-                          <Button variant="outline" size="sm">
-                            <Download className="h-4 w-4 mr-2" />
-                            Download Report
-                          </Button>
-                        )}
-                        
-                        <div className="ml-auto text-xs text-gray-500">
-                          {study.confidenceScore && (
-                            <span>Confidence: {(study.confidenceScore * 100).toFixed(1)}%</span>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                
-                {studies.length === 0 && (
-                  <div className="text-center py-12">
-                    <FileText className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      No studies found
-                    </h3>
-                    <p className="text-gray-600">
-                      This patient doesn't have any completed diagnostic studies yet.
-                    </p>
+                    </div>
                   </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* Studies List */}
+          <div className="lg:col-span-2">
+            <Card className="rounded-2xl bg-white/70 backdrop-blur-sm border border-white/20 shadow-xl">
+              <CardHeader className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-t-2xl">
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5" />
+                  Diagnostic Studies ({studies.length})
+                </CardTitle>
+                <CardDescription className="text-blue-100">
+                  Complete history of diagnostic studies and reports
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="relative">
+                  {/* Timeline line */}
+                  {studies.length > 1 && (
+                    <div className="absolute left-6 top-8 bottom-8 w-0.5 bg-gradient-to-b from-blue-200 to-cyan-200"></div>
+                  )}
+                  
+                  <div className="space-y-8">
+                    {studies.map((study) => {
+                      const triage = study.triage ?? { level: "", bodyPart: "", detections: [], recommendations: [] }
+                      const detections = Array.isArray(triage.detections) ? triage.detections : []
+                      const recommendations = Array.isArray(triage.recommendations) ? triage.recommendations : []
+
+                      return (
+                        <div key={study.id} className="relative">
+                          {/* Timeline dot */}
+                          <div className="absolute left-4 top-6 w-4 h-4 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full border-4 border-white shadow-lg z-10"></div>
+                          
+                          {/* Study card */}
+                          <Card className="ml-12 border border-gray-200/50 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 bg-white/80 backdrop-blur-sm">
+                            <CardHeader className="pb-4">
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <CardTitle className="text-xl font-bold text-gray-800">
+                                    {`Study #${study.studyNumber ?? "—"}`}
+                                  </CardTitle>
+                                  <CardDescription className="text-base font-medium text-gray-600">
+                                    {formatDate(study.date)}
+                                  </CardDescription>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {getTriageBadge(triage.level)}
+                                </div>
+                              </div>
+                            </CardHeader>
+                            
+                            <CardContent className="space-y-6">
+                              {/* Study Details */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-xl border border-blue-200">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
+                                      <Activity className="h-3 w-3 text-white" />
+                                    </div>
+                                    <span className="font-semibold text-blue-800 text-sm">Body Part</span>
+                                  </div>
+                                  <p className="text-blue-700 font-medium">{study.bodyPart || triage.bodyPart || "—"}</p>
+                                </div>
+                                <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-xl border border-green-200">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                                      <FileText className="h-3 w-3 text-white" />
+                                    </div>
+                                    <span className="font-semibold text-green-800 text-sm">Processing Mode</span>
+                                  </div>
+                                  <p className="text-green-700 font-medium">{study.processingMode || "—"}</p>
+                                </div>
+                              </div>
+                              
+                              {!!study.symptoms && (
+                                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <AlertCircle className="h-4 w-4 text-orange-500" />
+                                    <span className="font-medium text-sm text-orange-800">Symptoms</span>
+                                  </div>
+                                  <p className="text-sm text-orange-700">{study.symptoms}</p>
+                                </div>
+                              )}
+                              
+                              {!!study.notes && (
+                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <FileText className="h-4 w-4 text-gray-500" />
+                                    <span className="font-medium text-sm text-gray-800">Clinical Notes</span>
+                                  </div>
+                                  <p className="text-sm text-gray-700">{study.notes}</p>
+                                </div>
+                              )}
+                              
+                              {/* Detections */}
+                              {detections.length > 0 && (
+                                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                                  <div className="flex items-center gap-2 mb-3">
+                                    <Activity className="h-4 w-4 text-red-500" />
+                                    <span className="font-medium text-sm text-red-800">AI Detections</span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {detections.map((detection, idx) => (
+                                      <Badge key={idx} className="bg-red-100 text-red-800 border-red-300">
+                                        {detection.label} ({(Math.max(0, Math.min(1, detection.score)) * 100).toFixed(1)}%)
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Recommendations */}
+                              {recommendations.length > 0 && (
+                                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                                  <div className="flex items-center gap-2 mb-3">
+                                    <CheckCircle className="h-4 w-4 text-indigo-500" />
+                                    <span className="font-medium text-sm text-indigo-800">Clinical Recommendations</span>
+                                  </div>
+                                  <ul className="space-y-2">
+                                    {recommendations.map((rec, idx) => (
+                                      <li key={idx} className="flex items-start gap-2 text-sm text-indigo-700">
+                                        <Star className="h-3 w-3 text-indigo-500 mt-1 flex-shrink-0" />
+                                        {rec}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              
+                              {/* Patient Summary */}
+                              {!!study.patientSummary && (
+                                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Brain className="h-4 w-4 text-purple-500" />
+                                    <span className="font-medium text-sm text-purple-800">AI Summary</span>
+                                  </div>
+                                  <p className="text-sm text-purple-700">{study.patientSummary}</p>
+                                </div>
+                              )}
+                              
+                              {/* Actions */}
+                              <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                                <div className="flex items-center gap-3">
+                                  {!!study.images?.original && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                                      onClick={() => {
+                                        // You can swap this for your viewer route/modal
+                                        window.open(study.images?.annotated || study.images.original!, "_blank")
+                                      }}
+                                    >
+                                      <Eye className="h-4 w-4 mr-2" />
+                                      View Images
+                                    </Button>
+                                  )}
+                                  
+                                  {!!study.pdfReport && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="hover:bg-green-50 hover:border-green-300 transition-colors"
+                                      onClick={() => {
+                                        // Adjust to your API for fetching reports
+                                        window.open(`/api/reports/${encodeURIComponent(study.pdfReport!.filename)}`, "_blank")
+                                      }}
+                                    >
+                                      <Download className="h-4 w-4 mr-2" />
+                                      Download Report
+                                    </Button>
+                                  )}
+                                  
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="hover:bg-indigo-50 transition-colors"
+                                    onClick={() => {
+                                      router.push(`/patients/${encodeURIComponent(patientId)}/studies/${encodeURIComponent(study.id)}`)
+                                    }}
+                                  >
+                                    <ExternalLink className="h-4 w-4 mr-2" />
+                                    Details
+                                  </Button>
+                                </div>
+                                
+                                <div className="flex items-center gap-4 text-xs text-gray-500">
+                                  {typeof study.confidenceScore === "number" && (
+                                    <div className="flex items-center gap-1">
+                                      <CheckCircle className="h-3 w-3" />
+                                      <span>Confidence: {(Math.max(0, Math.min(1, study.confidenceScore)) * 100).toFixed(1)}%</span>
+                                    </div>
+                                  )}
+                                  {typeof study.processingTime === "number" && (
+                                    <div className="flex items-center gap-1">
+                                      <Clock className="h-3 w-3" />
+                                      <span>{study.processingTime}s</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </div>
+                      )
+                    })}
+                      
+                      {studies.length === 0 && (
+                        <div className="text-center py-12">
+                          <FileText className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                          <h3 className="text-lg font-medium text-gray-900 mb-2">
+                            No studies found
+                          </h3>
+                          <p className="text-gray-600">
+                            This patient doesn't have any completed diagnostic studies yet.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-  )
+    )
 }
