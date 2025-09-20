@@ -1,4 +1,5 @@
 "use client";
+import { UserButton, useUser } from "@clerk/nextjs";
 import {
     FileText,
     History,
@@ -12,6 +13,7 @@ import { useState } from "react";
 import { Sidebar, SidebarBody, SidebarLink } from "./ui/animated-sidebar";
 
 export function OrthoAssistSidebar() {
+  const { user, isSignedIn } = useUser();
   const links = [
     {
       label: "Overview",
@@ -62,6 +64,29 @@ export function OrthoAssistSidebar() {
             ))}
           </div>
         </div>
+        
+        {/* User Profile Section */}
+        {isSignedIn && user && (
+          <div className="border-t border-medical-blue-200 dark:border-medical-blue-800 pt-4">
+            <SidebarLink
+              link={{
+                label: open ? user.fullName || user.username || "User" : "",
+                href: "#",
+                icon: (
+                  <UserButton 
+                    afterSignOutUrl="/"
+                    appearance={{
+                      elements: {
+                        avatarBox: "h-8 w-8",
+                        userButtonTrigger: "focus:shadow-none"
+                      }
+                    }}
+                  />
+                ),
+              }}
+            />
+          </div>
+        )}
       </SidebarBody>
     </Sidebar>
   );
