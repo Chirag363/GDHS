@@ -1,9 +1,10 @@
 "use client"
-import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
+import { HeroScrollDemo } from "@/components/hero-scroll-demo"
+import { Navbar } from "@/components/navbar"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { UseCasesSection } from "@/components/use-cases-3d"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
@@ -13,16 +14,13 @@ export default function HomePage() {
     
     <div className="min-h-screen ">
       <Navbar />
-      {/* Hero Section */}
-      <section className="pt-20 pb-16 px-4 sm:px-6 lg:px-8">
+      
+      {/* Hero Section with Scroll Animation */}
+      <HeroScrollDemo />
+
+      {/* Action Buttons */}
+      <section className="py-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto text-center">
-          <h1 className="text-4xl md:text-6xl font-bold text-foreground mb-6 text-balance">
-            Modular Orthopedic Agent for Precise, Faster Diagnosis
-          </h1>
-          <p className="text-xl text-muted-foreground mb-8 max-w-3xl mx-auto text-pretty">
-            Multi-agent workflow that validates imaging, detects fractures, triages severity, and generates clear,
-            clinician-ready reports.
-          </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button size="lg" asChild>
               <Link href="/signup">Get Started</Link>
@@ -189,102 +187,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Use Cases */}
-      <section className="py-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <h2 className="text-3xl font-bold text-center text-foreground mb-12">Use Cases</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle>Clinicians</CardTitle>
-                <CardDescription>
-                  Enhanced diagnostic confidence with AI-powered second opinions and detailed analysis reports.
-                </CardDescription>
-              </CardHeader>
-            </Card>
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle>Rural X-ray Centers</CardTitle>
-                <CardDescription>
-                  Bridge expertise gaps with instant specialist-level analysis for remote healthcare facilities.
-                </CardDescription>
-              </CardHeader>
-            </Card>
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle>Health Camps</CardTitle>
-                <CardDescription>
-                  Rapid triage and diagnosis capabilities for mobile healthcare and emergency response scenarios.
-                </CardDescription>
-              </CardHeader>
-            </Card>
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle>Telemedicine</CardTitle>
-                <CardDescription>
-                  Enable remote consultations with comprehensive imaging analysis and patient communication tools.
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing Teaser */}
-  <section className="py-16 bg-muted px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto text-center">
-          <h2 className="text-3xl font-bold text-foreground mb-8">Simple, Transparent Pricing</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle>Basic</CardTitle>
-                <CardDescription>Essential features for small practices</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li>• Up to 100 studies/month</li>
-                  <li>• Basic triage system</li>
-                  <li>• Standard reports</li>
-                </ul>
-              </CardContent>
-            </Card>
-            <Card className="rounded-2xl border-blue-200">
-              <CardHeader>
-                <Badge className="w-fit mb-2">Popular</Badge>
-                <CardTitle>Pro</CardTitle>
-                <CardDescription>Advanced features for growing practices</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li>• Unlimited studies</li>
-                  <li>• Advanced AI agents</li>
-                  <li>• Custom reports</li>
-                  <li>• API access</li>
-                </ul>
-              </CardContent>
-            </Card>
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle>Enterprise</CardTitle>
-                <CardDescription>Full-scale deployment solutions</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li>• Custom deployment</li>
-                  <li>• Dedicated support</li>
-                  <li>• Integration assistance</li>
-                  <li>• SLA guarantees</li>
-                </ul>
-              </CardContent>
-            </Card>
-          </div>
-          <div className="mt-8">
-            <Button size="lg" asChild>
-              <Link href="/pricing">Contact Sales</Link>
-            </Button>
-          </div>
-        </div>
-      </section>
+      {/* Use Cases with 3D Cards */}
+      <UseCasesSection />
 
       {/* FAQ */}
       <section className="py-16 px-4 sm:px-6 lg:px-8">

@@ -31,14 +31,8 @@ export function Navbar() {
               <Link href="/dashboard" className="text-muted-foreground hover:text-primary transition-colors">
                 Dashboard
               </Link>
-              <Link href="/pricing" className="text-muted-foreground hover:text-primary transition-colors">
-                Pricing
-              </Link>
               <Link href="/docs" className="text-muted-foreground hover:text-primary transition-colors">
                 Docs
-              </Link>
-              <Link href="/contact" className="text-muted-foreground hover:text-primary transition-colors">
-                Contact
               </Link>
             </div>
           </div>
@@ -85,14 +79,8 @@ export function Navbar() {
               <Link href="/dashboard" className="block px-3 py-2 text-muted-foreground hover:text-primary">
                 Dashboard
               </Link>
-              <Link href="/pricing" className="block px-3 py-2 text-muted-foreground hover:text-primary">
-                Pricing
-              </Link>
               <Link href="/docs" className="block px-3 py-2 text-muted-foreground hover:text-primary">
                 Docs
-              </Link>
-              <Link href="/contact" className="block px-3 py-2 text-muted-foreground hover:text-primary">
-                Contact
               </Link>
               <div className="px-3 py-2 space-y-2">
                 <Button variant="outline" className="w-full" asChild>

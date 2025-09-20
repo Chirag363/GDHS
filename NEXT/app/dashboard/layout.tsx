@@ -1,6 +1,6 @@
-import type React from "react"
-import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { Navbar } from "@/components/navbar"
+import { OrthoAssistSidebar } from "@/components/ortho-sidebar"
+import type React from "react"
 
 export default function DashboardLayout({
   children,
@@ -11,7 +11,7 @@ export default function DashboardLayout({
     <div className="min-h-screen bg-background">
       <Navbar />
       <div className="flex h-[calc(100vh-4rem)]">
-        <DashboardSidebar />
+        <OrthoAssistSidebar />
         <main className="flex-1 overflow-auto bg-background">{children}</main>
       </div>
     </div>
