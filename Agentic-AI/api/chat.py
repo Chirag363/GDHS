@@ -114,19 +114,71 @@ async def handle_xray_analysis(request: ChatMessage, chat_id: str) -> ChatRespon
         await hand_agent.load_model()
         await leg_agent.load_model()
         
-        # Classify body part
-        body_part_result = await router_agent.classify_body_part(image_data)
-        body_part = body_part_result.get("body_part", "hand")
+        # First, check if user provided body part context in message
+        message_lower = request.message.lower()
+        context_body_part = None
         
-        # Run appropriate analysis
+        # Check for explicit body part mentions in the message
+        if any(keyword in message_lower for keyword in ['hand', 'wrist', 'finger', 'thumb']):
+            context_body_part = "hand"
+            logger.info("Body part context detected from message: hand")
+        elif any(keyword in message_lower for keyword in ['leg', 'ankle', 'foot', 'toe', 'knee', 'shin']):
+            context_body_part = "leg"
+            logger.info("Body part context detected from message: leg")
+        
+        # Determine body part using context, router, or fallback detection
+        if context_body_part:
+            # Use explicit context from user message
+            body_part = context_body_part
+            confidence = 0.95  # High confidence when user explicitly mentions body part
+            logger.info(f"Using body part from message context: {body_part}")
+        else:
+            # Try router classification
+            body_part_result = await router_agent.classify_body_part(image_data)
+            router_body_part = body_part_result.get("body_part", "unknown")
+            router_confidence = body_part_result.get("confidence", 0.0)
+            
+            # If router has high confidence, use its result
+            if router_confidence >= 0.70 and router_body_part in ["hand", "leg"]:
+                body_part = router_body_part
+                confidence = router_confidence
+                logger.info(f"Using router classification: {body_part} (confidence: {confidence:.3f})")
+            else:
+                # Fallback to aspect ratio analysis (same as analyze.py)
+                logger.info("Router confidence too low, using aspect ratio fallback")
+                from PIL import Image
+                import io
+                
+                image = Image.open(io.BytesIO(image_data))
+                width, height = image.size
+                aspect_ratio = width / height
+                
+                # Determine body part based on aspect ratio (same logic as analyze.py)
+                if aspect_ratio > 1.2:  # Wide image - likely hand
+                    body_part = 'hand'
+                    confidence = 0.75
+                elif aspect_ratio < 0.8:  # Tall image - likely leg
+                    body_part = 'leg'
+                    confidence = 0.80
+                else:  # Square-ish - default to hand
+                    body_part = 'hand'
+                    confidence = 0.60
+                
+                logger.info(f"Aspect ratio fallback: {body_part} (ratio: {aspect_ratio:.2f}, confidence: {confidence:.2f})")
+        
+        # Run appropriate analysis based on determined body part
         if body_part == "hand":
             analysis_result = await hand_agent.analyze(image_data)
-        else:
+        elif body_part == "leg":
             analysis_result = await leg_agent.analyze(image_data)
+        else:
+            # Should not happen with our logic, but safety fallback
+            logger.warning(f"Unknown body part '{body_part}', defaulting to hand")
+            body_part = "hand"
+            analysis_result = await hand_agent.analyze(image_data)
         
         # Extract detections from analysis result
         detections = analysis_result.get("detections", [])
-        annotated_image_data = analysis_result.get("annotated_image_data", image_data)
         
         # Generate diagnosis
         diagnosis = await diagnosis_agent.analyze(detections, request.message)
@@ -134,11 +186,37 @@ async def handle_xray_analysis(request: ChatMessage, chat_id: str) -> ChatRespon
         # Perform triage
         triage_result = await triage_agent.assess(detections, diagnosis)
         
-        # Upload images to Cloudinary
-        cloudinary_urls = await cloudinary_service.upload_analysis_images(
-            original_image=image_data,
-            annotated_image=annotated_image_data
+        # Upload images to Cloudinary (FIXED: same logic as /api/analyze)
+        cloudinary_urls = {}
+        
+        # Upload original image
+        original_upload = cloudinary_service.upload_original_image(
+            image_data,
+            "chat_image.jpg", 
+            str(uuid.uuid4())
         )
+        
+        if original_upload:
+            cloudinary_urls['original_image_url'] = original_upload['url']
+            cloudinary_urls['original_image_public_id'] = original_upload['public_id']
+            logger.info(f"Original image uploaded to Cloudinary: {original_upload['url']}")
+        
+        # Upload annotated image ONLY if it exists and is different from original
+        if analysis_result.get('annotated_image_data'):
+            annotated_upload = cloudinary_service.upload_annotated_image(
+                analysis_result['annotated_image_data'],  # Use actual annotated image
+                "chat_image.jpg",
+                str(uuid.uuid4())
+            )
+            
+            if annotated_upload:
+                cloudinary_urls['annotated_image_url'] = annotated_upload['url']
+                cloudinary_urls['annotated_image_public_id'] = annotated_upload['public_id']
+                logger.info(f"Annotated image uploaded to Cloudinary: {annotated_upload['url']}")
+            else:
+                logger.warning("Failed to upload annotated image to Cloudinary")
+        else:
+            logger.warning("No annotated image data found in analysis result")
         
         # Compile analysis data (exclude binary data for JSON serialization)
         analysis_data = {
@@ -185,15 +263,21 @@ The images have been processed and annotated with the detection results."""
             ChatAction(type="second_opinion", label="🔄 Request Second Analysis", priority=4)
         ]
         
+        # Create images array with only valid URLs
+        images = []
+        if cloudinary_urls.get("original_image_url"):
+            images.append(cloudinary_urls["original_image_url"])
+        if cloudinary_urls.get("annotated_image_url"):
+            images.append(cloudinary_urls["annotated_image_url"])
+        
+        logger.info(f"Chat response includes {len(images)} images: {[url[:80] + '...' for url in images]}")
+        
         return ChatResponse(
             message_type=MessageType.ANALYSIS,
             content=response_message,
             data=analysis_data,
             actions=actions,
-            images=[
-                cloudinary_urls.get("original_image_url"), 
-                cloudinary_urls.get("annotated_image_url")
-            ],
+            images=images,
             chat_id=chat_id,
             intent=ChatIntent.XRAY_ANALYSIS,
             mcp_tools=mcp_tool_handler.get_available_tools("post_analysis")

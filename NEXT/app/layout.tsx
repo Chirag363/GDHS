@@ -1,12 +1,13 @@
-import type React from "react"
-import type { Metadata } from "next"
-import { GeistSans } from "geist/font/sans"
-import { GeistMono } from "geist/font/mono"
-import { Analytics } from "@vercel/analytics/next"
-import { Suspense } from "react"
-import "./globals.css"
-import { ClerkProvider } from "@clerk/nextjs"
 import { ThemeProvider } from "@/components/theme-provider"
+import { ClerkProvider } from "@clerk/nextjs"
+import { Analytics } from "@vercel/analytics/next"
+import { GeistMono } from "geist/font/mono"
+import { GeistSans } from "geist/font/sans"
+import type { Metadata } from "next"
+import type React from "react"
+import { Suspense } from "react"
+import "../styles/chat.css"
+import "./globals.css"
 
 export const metadata: Metadata = {
   title: "OrthoAssist - Modular Orthopedic AI Assistant",

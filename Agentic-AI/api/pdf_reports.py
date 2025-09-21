@@ -4,11 +4,61 @@ from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import FileResponse
 import tempfile
 import os
+from pathlib import Path
 from loguru import logger
 
 from agents.pdf_report import pdf_report_agent
 
 router = APIRouter(prefix="/api", tags=["reports"])
+
+
+@router.get("/reports/{report_id}/download")
+async def download_existing_report(report_id: str):
+    """
+    Download an existing PDF report by report ID.
+    
+    Args:
+        report_id: The UUID of the report to download
+        
+    Returns:
+        PDF file as downloadable response
+    """
+    try:
+        # Look for the PDF in the reports directory
+        reports_dir = Path("reports")
+        
+        # Try different possible filenames
+        possible_filenames = [
+            f"orthoassist_report_{report_id}.pdf",
+            f"report_{report_id}.pdf",
+            f"{report_id}.pdf"
+        ]
+        
+        for filename in possible_filenames:
+            file_path = reports_dir / filename
+            if file_path.exists():
+                logger.info(f"Serving report: {file_path}")
+                return FileResponse(
+                    path=str(file_path),
+                    media_type="application/pdf",
+                    filename=f"orthoassist_report_{report_id[:8]}.pdf"
+                )
+        
+        # If we get here, the file wasn't found
+        logger.error(f"Report not found: {report_id}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Report not found: {report_id}"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to download report {report_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to download report: {str(e)}"
+        )
 
 
 @router.post("/generate-pdf-report")

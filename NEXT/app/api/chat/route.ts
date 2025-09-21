@@ -1,11 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { 
-  ChatMessage, 
-  ChatResponse, 
-  ApiError, 
-  UserInfo, 
-  MCPContext 
+import {
+  ApiError,
+  ChatMessage,
+  ChatResponse
 } from '@/lib/types/chat';
+import { NextRequest, NextResponse } from 'next/server';
 
 // Environment variable for FastAPI backend URL
 const FASTAPI_BASE_URL = process.env.FASTAPI_BASE_URL || 'http://localhost:8000';
@@ -91,7 +89,51 @@ export async function POST(request: NextRequest) {
     }
 
     // Send request to FastAPI backend
+    console.log('Sending request to FastAPI backend:', {
+      endpoint: '/api/chat',
+      hasImage: !!chatData.image_data,
+      message: chatData.message,
+      fastApiUrl: FASTAPI_BASE_URL
+    });
+    
     const response: ChatResponse = await callFastAPIEndpoint('/api/chat', chatData);
+    
+    console.log('Received response from backend:', {
+      hasImages: !!response.images,
+      imageCount: response.images?.length,
+      messageType: response.message_type,
+      contentLength: response.content?.length,
+      imageUrls: response.images?.map((url, idx) => ({
+        index: idx,
+        type: idx === 0 ? 'original' : 'annotated',
+        url: url?.substring(0, 80) + '...'
+      })),
+      dataKeys: response.data ? Object.keys(response.data) : [],
+      detectionCount: response.data?.detection_count,
+      cloudinaryUrls: response.data?.cloudinary_urls
+    });
+
+    // Defensive: Ensure proper Cloudinary URLs and avoid duplicate images
+    if (response.data?.cloudinary_urls) {
+      const originalUrl = response.data.cloudinary_urls.original_image_url;
+      const annotatedUrl = response.data.cloudinary_urls.annotated_image_url;
+      
+      // Validate we have proper Cloudinary URLs
+      if (originalUrl && annotatedUrl && originalUrl !== annotatedUrl) {
+        // Use verified Cloudinary URLs
+        response.images = [originalUrl, annotatedUrl];
+        console.log('Using verified Cloudinary URLs:', {
+          original: originalUrl.substring(0, 80) + '...',
+          annotated: annotatedUrl.substring(0, 80) + '...'
+        });
+      } else if (originalUrl) {
+        // Only return original if annotated is missing or duplicate
+        response.images = [originalUrl];
+        console.warn('Annotated image missing or duplicate, only showing original');
+      } else {
+        console.error('No valid Cloudinary URLs found');
+      }
+    }
 
     // Return successful response
     return NextResponse.json(response, { status: 200 });
