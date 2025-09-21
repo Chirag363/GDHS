@@ -184,7 +184,7 @@ export default function ChatPage() {
                                         <Activity className="h-5 w-5" />
                                     </AvatarFallback>
                                 </Avatar>
-                                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-background"></div>
+                                <div className="absolute-bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-background"></div>
                             </div>
                             <div>
                                 <h1 className="text-lg font-semibold">OrthoAssist</h1>

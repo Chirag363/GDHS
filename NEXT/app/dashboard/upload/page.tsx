@@ -345,12 +345,12 @@ export default function UploadPage() {
 
   return (
     <div className="p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold ">Upload Study</h1>
+      <div className="mb-8 text-center">
+        <h1 className="text-3xl font-bold">Upload Study</h1>
         <p className="text-gray-600 mt-2">Upload medical images for AI-powered analysis</p>
       </div>
 
-      <div className="max-w-2xl">
+      <div className="max-w-2xl mx-auto">
         {/* File Upload */}
         <Card className="rounded-2xl mb-6">
           <CardHeader>
