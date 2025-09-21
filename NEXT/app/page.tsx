@@ -22,40 +22,23 @@ export default function HomePage() {
       <section className="py-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto text-center">
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" asChild>
-              <Link href="/signup">Get Started</Link>
-            </Button>
-            <Button size="lg" variant="outline" asChild>
+            <button className="relative inline-flex h-12 overflow-hidden rounded-full p-[1px] focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:ring-offset-slate-50" >
+            <span className="absolute inset-[-1000%] animate-[spin_2s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#E2CBFF_0%,#393BB2_50%,#E2CBFF_100%)]" />
+            <span className="inline-flex h-full w-full cursor-pointer items-center justify-center rounded-full bg-slate-950 px-3 py-1 text-sm font-medium text-white backdrop-blur-3xl">
+            <Link href="/signup">Get Started</Link>
+                  </span>
+            </button>
+            <button className="relative inline-flex h-12 overflow-hidden rounded-full p-[1px] focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:ring-offset-slate-50" >
+            <span className="absolute inset-[-1000%] animate-[spin_2s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#E2CBFF_0%,#393BB2_50%,#E2CBFF_100%)]" />
+            <span className="inline-flex h-full w-full cursor-pointer items-center justify-center rounded-full bg-slate-950 px-3 py-1 text-sm font-medium text-white backdrop-blur-3xl">
               <Link href="/product/workflow">View Workflow</Link>
-            </Button>
+            </span>
+            </button>
           </div>
         </div>
       </section>
 
-      {/* Key Stats Bar */}
-  <section className="py-12 bg-muted">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground">Multi-Modal Inputs</h3>
-              <p className="text-muted-foreground">X-ray, CT, MRI + text/audio</p>
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-foreground">Real-time Triage</h3>
-              <p className="text-muted-foreground">Red/Amber/Green classification</p>
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-foreground">MCP-driven Collaboration</h3>
-              <p className="text-muted-foreground">Parallel agents for speed</p>
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-foreground">Scalable & Extensible</h3>
-              <p className="text-muted-foreground">Modular architecture</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
+      
       {/* Feature Cards */}
       <section className="py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">

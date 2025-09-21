@@ -6,6 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import rehypeHighlight from 'rehype-highlight'
 import { 
   ArrowLeft, 
   User, 
@@ -250,24 +253,6 @@ export default function PatientDetailsPage() {
                 Complete medical history and diagnostic studies
               </p>
             </div>
-            
-            <Button 
-              onClick={handleAIAnalysis}
-              disabled={aiAnalysisLoading || studies.length === 0}
-              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 px-6 py-3 rounded-xl"
-            >
-              {aiAnalysisLoading ? (
-                <>
-                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                  Analyzing...
-                </>
-              ) : (
-                <>
-                  <Brain className="h-5 w-5 mr-2" />
-                  AI Clinical Analysis
-                </>
-              )}
-            </Button>
           </div>
         </div>
 
@@ -380,30 +365,6 @@ export default function PatientDetailsPage() {
                 )}
               </CardContent>
             </Card>
-
-            {/* AI Analysis Results */}
-            {!!aiAnalysisResult && (
-              <Card className="rounded-2xl mt-6 bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200/50 shadow-lg">
-                <CardHeader className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-t-2xl">
-                  <CardTitle className="flex items-center gap-2">
-                    <Brain className="h-5 w-5" />
-                    AI Clinical Analysis
-                  </CardTitle>
-                  <CardDescription className="text-purple-100">
-                    Comprehensive analysis of all patient studies
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-                    <div className="prose prose-sm max-w-none">
-                      <div className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800 font-mono">
-                        {aiAnalysisResult}
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </div>
 
           {/* Studies List */}
@@ -626,6 +587,83 @@ export default function PatientDetailsPage() {
                 </CardContent>
               </Card>
             </div>
+          </div>
+          
+          {/* AI Analysis Section */}
+          <div className="mt-8">
+            <div className="text-center mb-6">
+              <Button 
+                onClick={handleAIAnalysis}
+                disabled={aiAnalysisLoading || studies.length === 0}
+                className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 px-8 py-4 rounded-xl text-lg"
+              >
+                {aiAnalysisLoading ? (
+                  <>
+                    <Loader2 className="h-6 w-6 mr-3 animate-spin" />
+                    Analyzing Patient Data...
+                  </>
+                ) : (
+                  <>
+                    <Brain className="h-6 w-6 mr-3" />
+                    Generate AI Clinical Analysis
+                  </>
+                )}
+              </Button>
+              {studies.length === 0 && (
+                <p className="text-gray-500 text-sm mt-2">
+                  No studies available for analysis
+                </p>
+              )}
+            </div>
+            
+            {/* AI Analysis Results */}
+            {!!aiAnalysisResult && (
+              <Card className="rounded-2xl bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200/50 shadow-xl">
+                <CardHeader className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-t-2xl">
+                  <CardTitle className="flex items-center gap-3 text-xl">
+                    <Brain className="h-6 w-6" />
+                    AI Clinical Analysis Report
+                  </CardTitle>
+                  <CardDescription className="text-purple-100 text-base">
+                    Comprehensive analysis of all patient studies and medical history
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-8">
+                  <div className="bg-white rounded-xl p-8 shadow-sm border border-gray-100">
+                    <div className="prose prose-lg max-w-none prose-headings:text-gray-900 prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-h4:text-lg prose-p:text-gray-700 prose-strong:text-gray-900 prose-strong:font-bold prose-ul:list-disc prose-ol:list-decimal prose-li:text-gray-700 prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:bg-blue-50 prose-blockquote:pl-4 prose-blockquote:py-2 prose-code:bg-gray-100 prose-code:px-2 prose-code:py-1 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-white prose-table:border prose-th:border prose-td:border prose-th:bg-gray-50 prose-th:font-semibold">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeHighlight]}
+                        components={{
+                          h1: ({ node, ...props }) => <h1 className="text-3xl font-bold text-gray-900 mb-6 pb-3 border-b-2 border-purple-200" {...props} />,
+                          h2: ({ node, ...props }) => <h2 className="text-2xl font-bold text-gray-800 mb-4 mt-8 pb-2 border-b border-gray-200" {...props} />,
+                          h3: ({ node, ...props }) => <h3 className="text-xl font-semibold text-gray-800 mb-3 mt-6" {...props} />,
+                          h4: ({ node, ...props }) => <h4 className="text-lg font-semibold text-gray-700 mb-2 mt-4" {...props} />,
+                          p: ({ node, ...props }) => <p className="text-gray-700 mb-4 leading-relaxed" {...props} />,
+                          strong: ({ node, ...props }) => <strong className="font-bold text-gray-900" {...props} />,
+                          ul: ({ node, ...props }) => <ul className="list-disc pl-6 mb-4 space-y-2" {...props} />,
+                          ol: ({ node, ...props }) => <ol className="list-decimal pl-6 mb-4 space-y-2" {...props} />,
+                          li: ({ node, ...props }) => <li className="text-gray-700" {...props} />,
+                          blockquote: ({ node, ...props }) => <blockquote className="border-l-4 border-blue-500 bg-blue-50 pl-4 py-2 mb-4 italic" {...props} />,
+                          code: (props: any) => {
+                            const inline = !props.className?.includes('language-')
+                            return inline 
+                              ? <code className="bg-gray-100 px-2 py-1 rounded text-sm font-mono" {...props} />
+                              : <code className="block bg-gray-900 text-white p-4 rounded-lg overflow-x-auto text-sm font-mono" {...props} />
+                          },
+                          table: ({ node, ...props }) => <table className="min-w-full border border-gray-300 mb-4" {...props} />,
+                          th: ({ node, ...props }) => <th className="border border-gray-300 bg-gray-50 px-4 py-2 font-semibold text-left" {...props} />,
+                          td: ({ node, ...props }) => <td className="border border-gray-300 px-4 py-2" {...props} />,
+                          hr: ({ node, ...props }) => <hr className="my-8 border-t-2 border-gray-200" {...props} />,
+                        }}
+                      >
+                        {aiAnalysisResult}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </div>

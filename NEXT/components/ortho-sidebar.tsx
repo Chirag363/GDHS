@@ -7,6 +7,7 @@ import {
     MessageSquare,
     Shield,
     Upload,
+    Search,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -41,6 +42,13 @@ export function OrthoAssistSidebar() {
       href: "/dashboard/reports",
       icon: (
         <FileText className="h-5 w-5 shrink-0 text-medical-blue-600 dark:text-medical-blue-400" />
+      ),
+    },
+    {
+      label: "Discover",
+      href: "/dashboard/discover",
+      icon: (
+        <Search className="h-5 w-5 shrink-0 text-medical-blue-600 dark:text-medical-blue-400" />
       ),
     },
     {
