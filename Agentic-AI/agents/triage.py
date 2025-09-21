@@ -22,7 +22,7 @@ class TriageAgent:
     
     async def assess(self, detections: List[Dict[str, Any]], diagnosis: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Assess triage level based on detections and diagnosis.
+        Assess triage level based on detections and diagnosis using dynamic calculation.
         
         Args:
             detections: Detection results from AI models
@@ -32,49 +32,159 @@ class TriageAgent:
             Dict containing triage assessment
         """
         try:
-            # Simple rule-based triage
+            # Extract key information
             confidence = diagnosis.get("confidence", 0.0)
             primary_finding = diagnosis.get("primary_finding", "").lower()
+            detection_count = len(detections)
             
-            # Determine triage level
-            if any(keyword in primary_finding for keyword in ["compound", "open", "severe", "displaced"]):
-                level = "RED"
-                recommendation = "Seek immediate emergency medical attention"
-                priority = "immediate"
-            elif any(keyword in primary_finding for keyword in ["fracture", "break", "crack"]) and confidence > 0.6:
-                level = "AMBER"
-                recommendation = "Seek medical attention within 24-48 hours"
-                priority = "urgent"
-            elif any(keyword in primary_finding for keyword in ["possible", "minor", "hairline"]):
-                level = "GREEN"
-                recommendation = "Schedule appointment with healthcare provider"
-                priority = "non-urgent"
-            else:
-                level = "AMBER"  # Default to moderate priority
-                recommendation = "Consider medical evaluation"
-                priority = "moderate"
+            # Calculate dynamic triage score
+            triage_score = self._calculate_triage_score(
+                confidence=confidence,
+                primary_finding=primary_finding,
+                detections=detections,
+                detection_count=detection_count
+            )
+            
+            # Determine level based on calculated score
+            level_info = self._score_to_level(triage_score)
+            
+            # Debug logging
+            logger.info(f"Dynamic triage - Finding: '{primary_finding}', Confidence: {confidence:.1%}, Score: {triage_score:.3f}, Level: {level_info['level']}")
             
             return {
-                "level": level,
-                "confidence": min(confidence + 0.1, 1.0),  # Slight boost for triage confidence
-                "recommendation": recommendation,
-                "priority": priority,
-                "rationale": f"Based on finding: {diagnosis.get('primary_finding', 'Unknown')}",
-                "body_part": "hand",  # Default, should be detected
+                "level": level_info["level"],
+                "confidence": confidence,
+                "recommendation": level_info["recommendation"],
+                "priority": level_info["priority"],
+                "rationale": f"Triage score: {triage_score:.3f} based on {primary_finding} (confidence: {confidence:.1%})",
+                "body_part": diagnosis.get("body_part", "unknown"),
+                "triage_score": triage_score,
                 "timestamp": time.time()
             }
             
         except Exception as e:
-            logger.error(f"Triage assessment failed: {e}")
+            logger.error(f"Dynamic triage assessment failed: {e}")
             return {
                 "level": "AMBER",
                 "confidence": 0.3,
                 "recommendation": "Seek medical evaluation due to assessment error",
                 "priority": "moderate",
-                "error": str(e)
+                "error": str(e),
+                "triage_score": 0.5
             }
     
-    async def quick_assess(self, image_data: bytes, symptoms: Optional[str] = None, priority: bool = False) -> Dict[str, Any]:
+    def _calculate_triage_score(
+        self, 
+        confidence: float, 
+        primary_finding: str, 
+        detections: List[Dict[str, Any]], 
+        detection_count: int
+    ) -> float:
+        """
+        Calculate dynamic triage score based on multiple factors.
+        Score range: 0.0 (GREEN) to 1.0 (RED)
+        
+        Args:
+            confidence: Detection confidence (0.0 to 1.0)
+            primary_finding: Primary finding text
+            detections: List of all detections
+            detection_count: Number of detections
+            
+        Returns:
+            Triage score (0.0 to 1.0)
+        """
+        base_score = 0.0
+        
+        # Factor 1: Detection confidence (0.0 to 0.6 weight)
+        confidence_score = confidence * 0.6
+        
+        # Factor 2: Severity keywords (0.0 to 0.3 weight)
+        severity_score = self._calculate_severity_score(primary_finding)
+        
+        # Factor 3: Detection count factor (0.0 to 0.1 weight)
+        count_factor = min(detection_count * 0.02, 0.1)  # More detections = slightly higher score
+        
+        # Factor 4: Multiple high-confidence detections bonus
+        high_conf_detections = sum(1 for d in detections if d.get("score", 0) > 0.7)
+        multi_detection_bonus = min(high_conf_detections * 0.05, 0.1)
+        
+        # Combine all factors
+        total_score = confidence_score + severity_score + count_factor + multi_detection_bonus
+        
+        # Ensure score stays in valid range
+        return max(0.0, min(1.0, total_score))
+    
+    def _calculate_severity_score(self, primary_finding: str) -> float:
+        """
+        Calculate severity score based on finding keywords.
+        
+        Args:
+            primary_finding: Primary finding text (lowercase)
+            
+        Returns:
+            Severity score (0.0 to 0.3)
+        """
+        # Critical severity indicators (0.25-0.3)
+        if any(keyword in primary_finding for keyword in [
+            "compound", "open", "severe", "displaced", "comminuted", "avulsion"
+        ]):
+            return 0.3
+        
+        # High severity indicators (0.15-0.25)
+        if any(keyword in primary_finding for keyword in [
+            "fracture detected", "break", "crack", "confirmed fracture"
+        ]):
+            return 0.2
+        
+        # Medium severity indicators (0.05-0.15)
+        if any(keyword in primary_finding for keyword in [
+            "likely fracture", "probable fracture", "suspected fracture"
+        ]):
+            return 0.1
+        
+        # Low severity indicators (0.0-0.05)
+        if any(keyword in primary_finding for keyword in [
+            "possible fracture", "minor", "hairline", "stress"
+        ]):
+            return 0.05
+        
+        # No findings (0.0)
+        if any(keyword in primary_finding for keyword in [
+            "no fractures", "no fracture", "normal", "clear", "negative"
+        ]):
+            return 0.0
+        
+        # Unknown findings (conservative estimate)
+        return 0.1
+    
+    def _score_to_level(self, score: float) -> Dict[str, str]:
+        """
+        Convert triage score to level, recommendation, and priority.
+        
+        Args:
+            score: Triage score (0.0 to 1.0)
+            
+        Returns:
+            Dict with level, recommendation, and priority
+        """
+        if score >= 0.75:  # High urgency
+            return {
+                "level": "RED",
+                "recommendation": "Seek immediate emergency medical attention",
+                "priority": "immediate"
+            }
+        elif score >= 0.4:  # Medium urgency
+            return {
+                "level": "AMBER", 
+                "recommendation": "Seek medical attention within 24-48 hours",
+                "priority": "urgent"
+            }
+        else:  # Low urgency
+            return {
+                "level": "GREEN",
+                "recommendation": "Schedule routine medical evaluation if concerned",
+                "priority": "non-urgent"
+            }
         """
         Quick triage assessment for urgent cases.
         
@@ -228,8 +338,8 @@ class TriageAgent:
             # Get triage configuration
             triage_config = policy_service.get_triage_config(request_id)
             
-            # First try rule-based classification
-            rule_result = self._apply_rules(detections, symptoms, body_part, triage_config)
+            # First try dynamic rule-based classification (no hardcoded patterns)
+            rule_result = self._apply_dynamic_rules(detections, symptoms, body_part, triage_config)
             
             # If rules give high confidence, use that result
             if rule_result["confidence"] >= triage_config["high_confidence_threshold"]:
@@ -272,6 +382,88 @@ class TriageAgent:
                 "partial": True
             }
     
+    def _apply_dynamic_rules(
+        self,
+        detections: List[Dict[str, Any]],
+        symptoms: Optional[str] = None,
+        body_part: Optional[str] = None,
+        triage_config: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Apply dynamic rule-based triage classification without hardcoded patterns."""
+        
+        logger.info(f"Applying dynamic rules to {len(detections)} detections")
+        
+        if not detections:
+            # No detections - use dynamic scoring for consistency
+            logger.info(f"No detections found, checking symptoms: {symptoms}")
+            
+            # Calculate score for no detections case
+            severity_score = 0.0  # No detections = low severity
+            symptom_score = 0.0
+            
+            if symptoms and self._has_severe_symptoms(symptoms):
+                symptom_score = 0.3  # Severe symptoms boost score
+                logger.info("Severe symptoms detected")
+            
+            total_score = severity_score + symptom_score
+            level_info = self._score_to_level(total_score)
+            
+            logger.info(f"No detection triage - Score: {total_score:.3f}, Level: {level_info['level']}")
+            
+            return {
+                "level": level_info["level"],
+                "rationale": ["No fractures detected"] + (["Concerning symptoms reported"] if symptom_score > 0 else ["No concerning symptoms"]),
+                "confidence": 0.8
+            }
+        
+        # Use dynamic scoring for detection analysis
+        logger.info(f"Analyzing {len(detections)} detections dynamically")
+        
+        # Calculate overall triage score based on all detections
+        total_triage_score = 0.0
+        max_confidence = 0.0
+        rationale = []
+        
+        for detection in detections:
+            raw_label = detection.get("label", "")
+            label = raw_label.lower()
+            
+            # Get confidence score
+            score = detection.get("score")
+            if score is None:
+                score = detection.get("confidence", 0.0)
+            
+            max_confidence = max(max_confidence, score)
+            
+            # Calculate this detection's contribution to triage score
+            detection_severity = self._calculate_severity_score(label)
+            detection_contribution = (score * 0.7) + (detection_severity * 0.3)
+            
+            # Take the maximum contribution (most severe detection drives triage)
+            total_triage_score = max(total_triage_score, detection_contribution)
+            
+            rationale.append(f"{raw_label} detected (confidence: {score:.2f})")
+            
+            logger.info(f"Detection: {raw_label}, score: {score:.3f}, severity: {detection_severity:.3f}, contribution: {detection_contribution:.3f}")
+        
+        # Add symptom factor if present
+        if symptoms and self._has_severe_symptoms(symptoms):
+            total_triage_score = min(1.0, total_triage_score + 0.1)
+            rationale.append("Concerning symptoms reported")
+        
+        # Convert score to level
+        level_info = self._score_to_level(total_triage_score)
+        
+        logger.info(f"Final triage score: {total_triage_score:.3f}, Level: {level_info['level']}")
+        
+        return {
+            "level": level_info["level"],
+            "rationale": rationale,
+            "confidence": max_confidence,
+            "triage_score": total_triage_score,
+            "method": "dynamic_scoring"
+        }
+
     def _apply_rules(
         self,
         detections: List[Dict[str, Any]],
@@ -290,19 +482,27 @@ class TriageAgent:
         green_patterns = triage_config["green_patterns"]
         
         if not detections:
-            # No detections - check symptoms
+            # No detections - use dynamic scoring for consistency
+            logger.info(f"No detections found, checking symptoms: {symptoms}")
+            
+            # Calculate score for no detections case
+            severity_score = 0.0  # No detections = low severity
+            symptom_score = 0.0
+            
             if symptoms and self._has_severe_symptoms(symptoms):
-                return {
-                    "level": "AMBER",
-                    "rationale": ["No fractures detected but concerning symptoms reported"],
-                    "confidence": triage_config.get("no_detection_severe_symptoms_confidence", 0.7)
-                }
-            else:
-                return {
-                    "level": "GREEN", 
-                    "rationale": ["No fractures detected", "No concerning symptoms"],
-                    "confidence": triage_config.get("no_detection_confidence", 0.8)
-                }
+                symptom_score = 0.3  # Severe symptoms boost score
+                logger.info("Severe symptoms detected")
+            
+            total_score = severity_score + symptom_score
+            level_info = self._score_to_level(total_score)
+            
+            logger.info(f"No detection triage - Score: {total_score:.3f}, Level: {level_info['level']}")
+            
+            return {
+                "level": level_info["level"],
+                "rationale": ["No fractures detected"] + (["Concerning symptoms reported"] if symptom_score > 0 else ["No concerning symptoms"]),
+                "confidence": triage_config.get("no_detection_confidence", 0.8)
+            }
         
         # Analyze detections with confidence-based severity determination
         max_severity_level = "GREEN"
@@ -318,10 +518,10 @@ class TriageAgent:
             label = raw_label.lower()
             # Normalize label for matching: convert spaces/hyphens to underscores
             normalized_label = label.replace(" ", "").replace("-", "")
-            # Normalize confidence: prefer 'confidence', fallback to 'score'
-            score = detection.get("confidence")
+            # Normalize confidence: prefer 'score', fallback to 'confidence'
+            score = detection.get("score")
             if score is None:
-                score = detection.get("score", 0.0)
+                score = detection.get("confidence", 0.0)
             
             # Determine base severity category from patterns using normalized label
             base_severity = None

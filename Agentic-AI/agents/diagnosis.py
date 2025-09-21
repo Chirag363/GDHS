@@ -35,15 +35,23 @@ class DiagnosisAgent:
             
             if detections:
                 # Find highest confidence detection
-                best_detection = max(detections, key=lambda x: x.get("confidence", 0))
-                confidence = best_detection.get("confidence", 0)
+                best_detection = max(detections, key=lambda x: x.get("score", 0))
+                confidence = best_detection.get("score", 0)
                 
-                if confidence > 0.5:
-                    class_name = best_detection.get("class", "unknown")
+                if confidence > 0.3:  # Lower threshold to capture more detections
+                    class_name = best_detection.get("label", "unknown")
                     if "fracture" in class_name.lower():
-                        primary_finding = f"Possible {class_name}"
+                        if confidence > 0.7:
+                            primary_finding = f"Fracture detected"
+                        elif confidence > 0.5:
+                            primary_finding = f"Likely fracture"
+                        else:
+                            primary_finding = f"Possible fracture"
                     else:
                         primary_finding = f"Detected: {class_name}"
+                else:
+                    # Low confidence detection
+                    primary_finding = "Inconclusive findings"
             
             # Generate analysis
             analysis = {
@@ -51,6 +59,7 @@ class DiagnosisAgent:
                 "confidence": confidence,
                 "detections_count": len(detections),
                 "symptoms_provided": bool(symptoms),
+                "body_part": "hand",  # This should be passed from the calling context
                 "recommendations": [
                     "Seek medical evaluation for proper diagnosis",
                     "Follow up with healthcare provider",
